@@ -67,16 +67,21 @@
     <div id="mobile-toc-backdrop" class="hidden lg:hidden fixed inset-0 z-40 bg-black/40"></div>
 
     <!-- 3) 左側抽屜（off-canvas drawer） -->
+    <!-- 修改重點：加入 flex flex-col 讓內部可以垂直佈局，方便設定滾動區域 -->
     <aside id="mobile-toc-drawer"
-        class="lg:hidden fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-2xl border-r border-gray-200 transform -translate-x-full transition-transform duration-200">
-        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+        class="lg:hidden fixed inset-y-0 left-0 z-50 w-80 max-w-[85vw] bg-white shadow-2xl border-r border-gray-200 transform -translate-x-full transition-transform duration-200 flex flex-col">
+        
+        <!-- 標題區塊：設為 flex-shrink-0 避免被壓縮 -->
+        <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
             <h2 class="text-lg font-extrabold text-teal-700">試產目錄</h2>
             <button type="button" id="mobile-toc-close-btn"
                 class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold">
                 關閉
             </button>
         </div>
-        <div class="p-4">
+        
+        <!-- 內容列表區塊：設為 flex-1 佔滿剩餘空間，並加入 overflow-y-auto 允許滾動 -->
+        <div class="p-4 flex-1 overflow-y-auto">
             <div id="toc-container-mobile" class="space-y-2">
                 <p class="text-sm text-gray-400">點擊商品名稱快速跳轉...</p>
             </div>
@@ -89,7 +94,8 @@
 
         <!-- Desktop: 試產目錄 Sidebar (Hidden on mobile, sticky on desktop) -->
         <div class="hidden lg:block w-72 flex-shrink-0">
-            <div class="sticky top-8 p-4 bg-white rounded-xl shadow-xl border border-gray-200">
+            <!-- 修改重點：加入 max-h-[85vh] 限制最大高度，並加入 overflow-y-auto 允許滾動 -->
+            <div class="sticky top-8 p-4 bg-white rounded-xl shadow-xl border border-gray-200 max-h-[85vh] overflow-y-auto">
                 <h2 class="text-xl font-bold text-teal-600 border-b-2 border-teal-100 pb-2 mb-3">試產目錄</h2>
                 <div id="toc-container-desktop" class="space-y-2">
                     <p class="text-sm text-gray-400">點擊商品名稱快速跳轉...</p>
@@ -104,7 +110,7 @@
             <!-- 表單主要容器 -->
             <div id="main-container" class="bg-white rounded-xl shadow-2xl">
 
-                <!-- 表單總標題: 已更改為「製管會項目」 -->
+                <!-- 表單總標題 -->
                 <div class="p-6 rounded-t-xl bg-gray-50 border-b border-gray-200">
                     <h1 class="text-3xl font-extrabold text-gray-800">製管會項目</h1>
                     <p class="text-gray-500 mt-1">請填寫試產相關資訊及異常/優化追蹤細節。**所有欄位皆為非必填**</p>
@@ -304,7 +310,7 @@
 
         // 【更新】定義所有的下拉式選單選項
         const dropdownOptions = {
-            '品類': ['飯糰', '壽司手卷', '主食', '便當', '熱食義麵', '季節調理麵', '沙拉', '小吃', '三明治(調理麵包)'],
+            '品類': ['飯糰', '壽司手卷', '主食', '便當', '熱食義麵', '季節調理麵', '沙拉', '小吃', '三明治(調理麵包)', '甜點'],
             '階段': ['架上品', '試產一', '試產二', '試產1-0', '試產1-1', '其他量化'],
             '工廠列表': ['屏榮新豐', '屏榮大溪', '晉欣', '長家', '玉美', '連合發'],
             '責任端': ['生產端', '開發端', '物料端'],
@@ -322,6 +328,9 @@
             '新增規範': [],
             '': [],
         };
+
+        // 預填資料 (已清空，僅留空陣列)
+        const preloadedData = [];
 
         // 【重要更新】定義所有 Excel 輸出的欄位順序、標題名稱和對應的 Form Field Name
         const outputHeaders = [
@@ -557,6 +566,26 @@
                 }
             });
 
+            // 應用預填資料
+            if (dataToPreFill && Object.keys(dataToPreFill).length > 0) {
+                const fields = {
+                    'item_name': dataToPreFill.item_name,
+                    'meeting_date': dataToPreFill.meeting_date,
+                    'launch_date': dataToPreFill.launch_date,
+                    'category': dataToPreFill.category,
+                    'phase': dataToPreFill.phase,
+                    'main_factory': dataToPreFill.main_factory,
+                    'sub_factory': dataToPreFill.sub_factory
+                };
+
+                for (const [key, value] of Object.entries(fields)) {
+                    if (value) {
+                        const input = formElement.querySelector(`#${key}${suffix}`);
+                        if (input) input.value = value;
+                    }
+                }
+            }
+
             // 綁定連動
             const issueTypeSelect = formElement.querySelector(`#issue_type${suffix}`);
             if (issueTypeSelect) {
@@ -606,6 +635,7 @@
             const uniqueIndex = formIndex++;
             initializeFormInstance(newForm, uniqueIndex, dataToPreFill);
 
+            // 如果不是大量預載入期間（即手動新增時），滾動到新表單
             if (!dataToPreFill && currentForms.length > 0) {
                 newForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
@@ -720,8 +750,16 @@
             if (closeBtn) closeBtn.addEventListener('click', closeMobileTOC);
             if (backdrop) backdrop.addEventListener('click', closeMobileTOC);
 
-            // 初始化至少一筆
-            cloneAndInitializeForm();
+            // 根據預填資料生成表單
+            if (preloadedData && preloadedData.length > 0) {
+                preloadedData.forEach(data => {
+                    cloneAndInitializeForm(data);
+                });
+            } else {
+                // 如果沒有資料，初始化一筆空白的
+                cloneAndInitializeForm();
+            }
+            
             updateTOC();
 
             document.getElementById('submit-all-btn').addEventListener('click', handleSubmission);
