@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 PptxGenJS 用於生成簡報 -->
     <script src="https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <!-- 引入 SheetJS（XLSX）用於 Excel 匯入 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
 
     <style>
         /* 使用 Inter 字體 */
@@ -122,6 +124,56 @@
                             透過左側「試產目錄」點擊項目即可直接切換到該筆表單。
                         </div>
                     </div>
+
+                    <!-- ===== 匯入表格區塊（新增） ===== -->
+                    <div class="mt-4 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <button type="button" id="btnOpenImport"
+                                class="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 focus:ring-4 focus:ring-slate-200 font-semibold">
+                                匯入表格（Excel/CSV/TXT）
+                            </button>
+
+                            <input id="fileImport" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" class="hidden" />
+
+                            <button type="button" id="btnReplaceAll"
+                                class="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold text-gray-700">
+                                匯入並覆蓋現有項目
+                            </button>
+
+                            <button type="button" id="btnExportTableHtml"
+                                class="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 font-semibold text-gray-700">
+                                輸出成網頁表格
+                            </button>
+
+                            <span class="text-sm text-gray-500">
+                                支援表頭：會議日期、品類、商品、階段、上市日、主事廠、副事廠（順序可不同）
+                            </span>
+                        </div>
+
+                        <details class="mt-3">
+                            <summary class="cursor-pointer text-sm text-gray-700">或直接貼上文字（TSV/CSV）</summary>
+                            <textarea id="txtImport" class="mt-2 w-full border rounded-lg p-3 text-sm"
+                                rows="6" placeholder="貼上含表頭資料，例如：&#10;會議日期\t品類\t商品\t階段\t上市日\t主事廠\t副事廠&#10;2025/12/31\t甜點\t草莓厚奶雲餡泡芙\t試產二\t1月7日\t屏榮大溪\t"></textarea>
+                            <div class="mt-2 flex gap-2 flex-wrap">
+                                <button id="btnParseText" type="button"
+                                    class="px-3 py-2 rounded-lg border hover:bg-gray-50 font-semibold">
+                                    解析貼上內容（追加）
+                                </button>
+                                <button id="btnParseTextReplace" type="button"
+                                    class="px-3 py-2 rounded-lg border hover:bg-gray-50 font-semibold">
+                                    解析貼上內容（覆蓋）
+                                </button>
+                                <button id="btnClearText" type="button"
+                                    class="px-3 py-2 rounded-lg border hover:bg-gray-50">
+                                    清空
+                                </button>
+                            </div>
+                        </details>
+
+                        <div id="importStatus" class="mt-3 text-sm text-gray-600"></div>
+                    </div>
+                    <!-- ===== 匯入表格區塊（新增）End ===== -->
+
                 </div>
 
                 <div id="forms-wrapper" class="divide-y divide-gray-200">
@@ -1068,8 +1120,490 @@
 
             const pptBtn = document.getElementById('download-ppt-btn');
             if (pptBtn) pptBtn.addEventListener('click', () => generatePPT());
+
+            // ====== 匯入表格：事件綁定（新增） ======
+            const btnOpenImport = document.getElementById("btnOpenImport");
+            const fileImport = document.getElementById("fileImport");
+            const status = document.getElementById("importStatus");
+
+            const txtImport = document.getElementById("txtImport");
+            const btnParseText = document.getElementById("btnParseText");
+            const btnParseTextReplace = document.getElementById("btnParseTextReplace");
+            const btnClearText = document.getElementById("btnClearText");
+
+            const btnReplaceAll = document.getElementById("btnReplaceAll");
+
+            if (btnOpenImport && fileImport) {
+                btnOpenImport.addEventListener("click", () => fileImport.click());
+
+                fileImport.addEventListener("change", async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    try {
+                        status.textContent = `讀取中：${file.name}`;
+                        const imported = await parseFileToImportObjects(file);
+                        const prefills = imported.map(toPreFillObject);
+                        applyImportedPrefills(prefills, "append");
+                        status.textContent = `匯入完成：${prefills.length} 筆（追加）`;
+                    } catch (err) {
+                        console.error(err);
+                        status.textContent = `匯入失敗：${err.message || err}`;
+                    } finally {
+                        fileImport.value = "";
+                    }
+                });
+            }
+
+            if (btnReplaceAll && fileImport) {
+                btnReplaceAll.addEventListener("click", () => {
+                    const handler = async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                            status.textContent = `讀取中：${file.name}`;
+                            const imported = await parseFileToImportObjects(file);
+                            const prefills = imported.map(toPreFillObject);
+                            applyImportedPrefills(prefills, "replace");
+                            status.textContent = `匯入完成：${prefills.length} 筆（覆蓋）`;
+                        } catch (err) {
+                            console.error(err);
+                            status.textContent = `匯入失敗：${err.message || err}`;
+                        } finally {
+                            fileImport.value = "";
+                            fileImport.removeEventListener("change", handler);
+                        }
+                    };
+                    fileImport.addEventListener("change", handler);
+                    fileImport.click();
+                });
+            }
+
+            if (btnParseText && txtImport) {
+                btnParseText.addEventListener("click", () => {
+                    try {
+                        const imported = parsePastedTextToImportObjects(txtImport.value);
+                        const prefills = imported.map(toPreFillObject);
+                        applyImportedPrefills(prefills, "append");
+                        status.textContent = `匯入完成：${prefills.length} 筆（貼上追加）`;
+                    } catch (err) {
+                        console.error(err);
+                        status.textContent = `解析失敗：${err.message || err}`;
+                    }
+                });
+            }
+
+            if (btnParseTextReplace && txtImport) {
+                btnParseTextReplace.addEventListener("click", () => {
+                    try {
+                        const imported = parsePastedTextToImportObjects(txtImport.value);
+                        const prefills = imported.map(toPreFillObject);
+                        applyImportedPrefills(prefills, "replace");
+                        status.textContent = `匯入完成：${prefills.length} 筆（貼上覆蓋）`;
+                    } catch (err) {
+                        console.error(err);
+                        status.textContent = `解析失敗：${err.message || err}`;
+                    }
+                });
+            }
+
+            if (btnClearText && txtImport) {
+                btnClearText.addEventListener("click", () => {
+                    txtImport.value = "";
+                    if (status) status.textContent = "";
+                });
+            }
         });
+
+        // ====== 匯入表格：解析/套用（新增） ======
+        const IMPORT_HEADERS = ["會議日期","品類","商品","階段","上市日","主事廠","副事廠"];
+        const IMPORT_ALIASES = {
+            "會議日期": ["會議日期","會議日","日期","meeting_date"],
+            "品類": ["品類","分類","category"],
+            "商品": ["商品","商品名稱","品名","item","item_name"],
+            "階段": ["階段","階別","phase"],
+            "上市日": ["上市日","上市日期","launch_date"],
+            "主事廠": ["主事廠","主廠","主責工廠","main_factory"],
+            "副事廠": ["副事廠","副廠","協力工廠","sub_factory"]
+        };
+
+        function _norm(s) {
+            return String(s ?? "").replace(/\s+/g, "").replace(/：/g, "").trim().toLowerCase();
+        }
+
+        function _detectDelimiter(line) {
+            if (line.includes("\t")) return "\t";
+            if (line.includes(",")) return ",";
+            return "\t";
+        }
+
+        function _splitLine(line, delimiter) {
+            return line.split(delimiter).map(v => String(v ?? "").trim());
+        }
+
+        function _excelSerialToYMD(serial) {
+            const n = Number(serial);
+            if (!isFinite(n)) return "";
+            const utcMs = Math.round((n - 25569) * 86400 * 1000);
+            const d = new Date(utcMs);
+            if (isNaN(d.getTime())) return "";
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+            const dd = String(d.getUTCDate()).padStart(2, "0");
+            return `${y}-${m}-${dd}`;
+        }
+
+        function _toDateInputValue(value, meetingDateYMD = "") {
+            if (value === null || value === undefined) return "";
+            const v = String(value).trim();
+            if (!v) return "";
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+
+            const m1 = v.match(/^(\d{4})[\/\.](\d{1,2})[\/\.](\d{1,2})$/);
+            if (m1) {
+                const y = m1[1];
+                const m = String(Number(m1[2])).padStart(2, "0");
+                const d = String(Number(m1[3])).padStart(2, "0");
+                return `${y}-${m}-${d}`;
+            }
+
+            const m2 = v.match(/^(\d{1,2})\/(\d{1,2})$/);
+            if (m2) {
+                const mm = Number(m2[1]);
+                const dd = Number(m2[2]);
+                const base = meetingDateYMD || "";
+                let y = base ? Number(base.slice(0,4)) : new Date().getFullYear();
+                if (base) {
+                    const baseM = Number(base.slice(5,7));
+                    const baseD = Number(base.slice(8,10));
+                    if (mm < baseM || (mm === baseM && dd < baseD)) y += 1;
+                }
+                return `${y}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+            }
+
+            const m3 = v.match(/^(\d{1,2})\s*月\s*(\d{1,2})\s*日$/);
+            if (m3) {
+                const mm = Number(m3[1]);
+                const dd = Number(m3[2]);
+                const base = meetingDateYMD || "";
+                let y = base ? Number(base.slice(0,4)) : new Date().getFullYear();
+                if (base) {
+                    const baseM = Number(base.slice(5,7));
+                    const baseD = Number(base.slice(8,10));
+                    if (mm < baseM || (mm === baseM && dd < baseD)) y += 1;
+                }
+                return `${y}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+            }
+
+            if (/^\d{5,6}(\.\d+)?$/.test(v)) {
+                const ymd = _excelSerialToYMD(v);
+                if (ymd) return ymd;
+            }
+
+            return "";
+        }
+
+        function _buildHeaderIndex(headerRow) {
+            const headerNorm = headerRow.map(h => _norm(h));
+            const idx = {};
+
+            for (const key of IMPORT_HEADERS) {
+                const aliases = IMPORT_ALIASES[key] || [key];
+                let found = -1;
+                for (const a of aliases) {
+                    const i = headerNorm.findIndex(h => h === _norm(a));
+                    if (i >= 0) { found = i; break; }
+                }
+                if (found >= 0) idx[key] = found;
+            }
+            return idx;
+        }
+
+        function _mapAoaToImportObjects(aoa) {
+            const header = aoa[0] || [];
+            const idx = _buildHeaderIndex(header);
+
+            const missing = IMPORT_HEADERS.filter(h => idx[h] === undefined);
+            if (missing.length) throw new Error("缺少欄位：" + missing.join("、"));
+
+            const out = [];
+            for (let r = 1; r < aoa.length; r++) {
+                const row = aoa[r] || [];
+                const obj = {};
+                for (const h of IMPORT_HEADERS) obj[h] = String(row[idx[h]] ?? "").trim();
+                if (obj["商品"]) out.push(obj);
+            }
+            return out;
+        }
+
+        async function parseFileToImportObjects(file) {
+            const ext = (file.name.split(".").pop() || "").toLowerCase();
+
+            if (ext === "xlsx" || ext === "xls") {
+                if (typeof XLSX === "undefined") throw new Error("未載入 XLSX 套件。");
+                const ab = await file.arrayBuffer();
+                const wb = XLSX.read(ab, { type: "array" });
+                const wsName = wb.SheetNames[0];
+                const ws = wb.Sheets[wsName];
+                const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+                return _mapAoaToImportObjects(aoa);
+            }
+
+            const text = await file.text();
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            if (lines.length < 2) throw new Error("至少需要 1 行表頭 + 1 行資料。");
+            const delimiter = _detectDelimiter(lines[0]);
+            const aoa = lines.map(line => _splitLine(line, delimiter));
+            return _mapAoaToImportObjects(aoa);
+        }
+
+        function parsePastedTextToImportObjects(text) {
+            const lines = String(text || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            if (lines.length < 2) throw new Error("至少需要 1 行表頭 + 1 行資料。");
+            const delimiter = _detectDelimiter(lines[0]);
+            const aoa = lines.map(line => _splitLine(line, delimiter));
+            return _mapAoaToImportObjects(aoa);
+        }
+
+        function toPreFillObject(importObj) {
+            const meetingYMD = _toDateInputValue(importObj["會議日期"]);
+            return {
+                item_name: importObj["商品"] || "",
+                meeting_date: meetingYMD,
+                launch_date: _toDateInputValue(importObj["上市日"], meetingYMD),
+                category: importObj["品類"] || "",
+                phase: importObj["階段"] || "",
+                main_factory: importObj["主事廠"] || "",
+                sub_factory: importObj["副事廠"] || ""
+            };
+        }
+
+        function _clearAllFormInstances() {
+            const wrapper = document.getElementById("forms-wrapper");
+            if (!wrapper) return;
+            wrapper.innerHTML = "";
+            formIndex = 0;
+        }
+
+        function applyImportedPrefills(prefills, mode = "append") {
+            if (!Array.isArray(prefills) || prefills.length === 0) return;
+
+            if (mode === "replace") {
+                _clearAllFormInstances();
+            }
+
+            prefills.forEach(p => cloneAndInitializeForm(p));
+
+            const forms = getFormsArray();
+            if (forms.length > 0) setActiveForm(forms[0].id);
+            updateTOC();
+        }
     </script>
+
+    <!-- Add-on: 單一按鈕「輸出成網頁表格」＝輸出整頁網頁（含資料） -->
+    <script id="export-fullpage-html-addon">
+    (function () {
+        "use strict";
+
+        function safeJson(obj) {
+            // 把 < 轉成 \u003c，避免輸出檔案內的資料影響腳本
+            return JSON.stringify(obj).replace(/</g, "\\u003c");
+        }
+
+        function downloadText(text, filename) {
+            const BOM = "\uFEFF";
+            const blob = new Blob([BOM + text], { type: "text/html;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function collectFormPayloads() {
+            const forms = Array.from(document.querySelectorAll(".tracking-form-instance"));
+            return forms.map((form) => {
+                const payload = {};
+                const els = form.querySelectorAll("input[name], select[name], textarea[name]");
+                const radioSeen = new Set();
+
+                els.forEach((el) => {
+                    const name = el.getAttribute("name");
+                    if (!name) return;
+
+                    const tag = (el.tagName || "").toLowerCase();
+                    const type = (el.type || "").toLowerCase();
+
+                    if (tag === "input" && type === "file") return;
+
+                    if (tag === "input" && type === "radio") {
+                        if (radioSeen.has(name)) return;
+                        radioSeen.add(name);
+                        const checked = form.querySelector(`input[type="radio"][name="${CSS.escape(name)}"]:checked`);
+                        payload[name] = checked ? String(checked.value ?? "") : "";
+                        return;
+                    }
+
+                    if (tag === "input" && type === "checkbox") {
+                        payload[name] = el.checked ? (String(el.value ?? "true")) : "";
+                        return;
+                    }
+
+                    payload[name] = String(el.value ?? "");
+                });
+
+                return payload;
+            });
+        }
+
+        function toPreloadedData(payloads) {
+            return (payloads || []).map((p) => ({
+                item_name: (p["商品"] || "").trim(),
+                meeting_date: (p["會議日期"] || "").trim(),
+                launch_date: (p["上市日"] || "").trim(),
+                category: (p["品類"] || "").trim(),
+                phase: (p["階段"] || "").trim(),
+                main_factory: (p["主事廠"] || "").trim(),
+                sub_factory: (p["副事廠"] || "").trim(),
+            }));
+        }
+
+        function nowStamp() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const mo = String(now.getMonth() + 1).padStart(2, "0");
+            const d = String(now.getDate()).padStart(2, "0");
+            const hh = String(now.getHours()).padStart(2, "0");
+            const mm = String(now.getMinutes()).padStart(2, "0");
+            const ss = String(now.getSeconds()).padStart(2, "0");
+            return { y, mo, d, hh, mm, ss };
+        }
+
+        function exportFullPageHtml() {
+            const payloads = collectFormPayloads();
+            const preloaded = toPreloadedData(payloads);
+
+            const clone = document.documentElement.cloneNode(true);
+
+            // 匯出檔案不保留匯出按鈕/本 add-on
+            const expBtn = clone.querySelector("#btnExportTableHtml");
+            if (expBtn) expBtn.remove();
+            const addon = clone.querySelector("#export-fullpage-html-addon");
+            if (addon) addon.remove();
+
+            // 讓匯出檔案用 preloadedData 重建表單筆數
+            const fw = clone.querySelector("#forms-wrapper");
+            if (fw) fw.innerHTML = "";
+
+            let out = "<!DOCTYPE html>\n" + clone.outerHTML;
+
+            out = out.replace(/const\s+preloadedData\s*=\s*\[\s*\]\s*;/, "const preloadedData = " + safeJson(preloaded) + ";");
+
+            // 注意：外層 <script> 內不能出現結束標記字串，所以用拼接方式組合
+            const openTag = "<scr" + "ipt>";
+            const closeTag = "</scr" + "ipt>";
+
+            const payloadJson = safeJson(payloads);
+
+            const postfillJs =
+`(function(){
+  "use strict";
+  const payloads = ${payloadJson};
+
+  function setByName(form, name, value){
+    const els = form.querySelectorAll('[name="'+CSS.escape(name)+'"]');
+    if(!els || els.length===0) return;
+
+    if(els.length>1 && els[0].type && String(els[0].type).toLowerCase()==="radio"){
+      els.forEach(el=>{ el.checked = (String(el.value??"")===String(value??"")); });
+      return;
+    }
+
+    const el = els[0];
+    const tag = (el.tagName||"").toLowerCase();
+    const type = (el.type||"").toLowerCase();
+
+    if(tag==="input" && type==="checkbox"){
+      el.checked = !!value && String(value).trim()!=="" && String(value)!=="0";
+      return;
+    }
+
+    el.value = String(value ?? "");
+  }
+
+  function trigger(form, name){
+    const el = form.querySelector('[name="'+CSS.escape(name)+'"]');
+    if(el){
+      el.dispatchEvent(new Event('change', { bubbles:true }));
+      el.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+  }
+
+  function applyPhotoPreview(form){
+    const hidden = form.querySelector('input[name="照片資料"]');
+    if(!hidden) return;
+    const dataUrl = String(hidden.value || "");
+    const img = form.querySelector('img[id^="issue_photo_preview-"]');
+    const empty = form.querySelector('div[id^="issue_photo_empty-"]');
+    if(!img || !empty) return;
+    if(dataUrl && dataUrl.startsWith("data:image/")){
+      img.src = dataUrl;
+      img.classList.remove("hidden");
+      empty.classList.add("hidden");
+    }else{
+      img.src = "";
+      img.classList.add("hidden");
+      empty.classList.remove("hidden");
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const forms = Array.from(document.querySelectorAll('.tracking-form-instance'));
+    forms.forEach((form, i)=>{
+      const p = payloads[i] || {};
+      if(p["類型"]!==undefined){ setByName(form,"類型",p["類型"]); trigger(form,"類型"); }
+      if(p["詳細類型"]!==undefined){ setByName(form,"詳細類型",p["詳細類型"]); trigger(form,"詳細類型"); }
+      Object.keys(p).forEach((k)=>{
+        if(k==="類型"||k==="詳細類型") return;
+        setByName(form,k,p[k]);
+      });
+      trigger(form,"品類");
+      trigger(form,"階段");
+      trigger(form,"主事廠");
+      trigger(form,"副事廠");
+      applyPhotoPreview(form);
+    });
+  });
+})();`;
+
+            const postfill = openTag + "\n" + postfillJs + "\n" + closeTag;
+
+            out = out.replace(/<\/body>\s*<\/html>\s*$/i, postfill + "\n</body>\n</html>\n");
+            return out;
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const btn = document.getElementById("btnExportTableHtml");
+            if (!btn) return;
+
+            btn.addEventListener("click", () => {
+                try {
+                    const page = exportFullPageHtml();
+                    const t = nowStamp();
+                    downloadText(page, `製管會項目_匯入後整頁_${t.y}${t.mo}${t.d}_${t.hh}${t.mm}${t.ss}.html`);
+                } catch (err) {
+                    console.error(err);
+                    alert("輸出失敗：" + String(err && err.message ? err.message : err));
+                }
+            });
+        });
+    })();
+    </script>
+
+
 </body>
 </html>
-
