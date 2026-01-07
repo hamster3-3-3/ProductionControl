@@ -1401,7 +1401,7 @@
         }
     </script>
 
-    <!-- Add-on: 單一按鈕「輸出成網頁表格」＝輸出整頁網頁（含資料） -->
+    <!-- Add-on: 單一按鈕「輸出成網頁表格」＝輸出整頁網頁（含資料），且匯出檔案移除「匯入表格」區塊 -->
     <script id="export-fullpage-html-addon">
     (function () {
         "use strict";
@@ -1483,6 +1483,23 @@
             return { y, mo, d, hh, mm, ss };
         }
 
+        function removeImportBlockFromClone(clone) {
+            // 匯入區塊沒有固定 id，因此用「btnOpenImport 與 txtImport」找最小共同祖先並移除
+            const openBtn = clone.querySelector("#btnOpenImport");
+            const txt = clone.querySelector("#txtImport");
+            if (!openBtn || !txt) return;
+
+            let el = openBtn;
+            while (el) {
+                if (el.querySelector && el.querySelector("#txtImport")) {
+                    // el 是同時包含 btnOpenImport 和 txtImport 的最小共同祖先（通常就是匯入區塊外層 div）
+                    el.remove();
+                    return;
+                }
+                el = el.parentElement;
+            }
+        }
+
         function exportFullPageHtml() {
             const payloads = collectFormPayloads();
             const preloaded = toPreloadedData(payloads);
@@ -1495,18 +1512,21 @@
             const addon = clone.querySelector("#export-fullpage-html-addon");
             if (addon) addon.remove();
 
+            // 匯出檔案移除「匯入表格」功能區
+            removeImportBlockFromClone(clone);
+
             // 讓匯出檔案用 preloadedData 重建表單筆數
             const fw = clone.querySelector("#forms-wrapper");
             if (fw) fw.innerHTML = "";
 
             let out = "<!DOCTYPE html>\n" + clone.outerHTML;
 
+            // 替換 preloadedData（原檔就是 const preloadedData = [];）
             out = out.replace(/const\s+preloadedData\s*=\s*\[\s*\]\s*;/, "const preloadedData = " + safeJson(preloaded) + ";");
 
-            // 注意：外層 <script> 內不能出現結束標記字串，所以用拼接方式組合
+            // 外層 script 內避免出現結束標記字串，所以用拆字拼接
             const openTag = "<scr" + "ipt>";
             const closeTag = "</scr" + "ipt>";
-
             const payloadJson = safeJson(payloads);
 
             const postfillJs =
