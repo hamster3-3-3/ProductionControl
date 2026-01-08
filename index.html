@@ -299,21 +299,50 @@
 
                 <!-- 照片上傳 -->
                 <div>
-                    <label for="issue_photo" class="block text-sm font-semibold text-gray-700 mb-1">照片上傳（異常/優化佐證）</label>
-                    <input type="file" id="issue_photo" name="照片檔" accept="image/*"
-                        class="form-input bg-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
-                    <input type="hidden" id="issue_photo_data" name="照片資料" value="" />
-                    <div class="mt-3">
-                        <div class="text-xs text-gray-500 mb-2">建議：拍攝/上傳後會自動壓縮（加速PPT生成、避免檔案過大）。</div>
-                        <div class="w-full border border-gray-200 rounded-xl bg-white p-3">
-                            <img id="issue_photo_preview" alt="照片預覽" class="hidden w-full max-h-64 object-contain rounded-lg" />
-                            <div id="issue_photo_empty" class="text-sm text-gray-400">尚未上傳照片</div>
+                    <div class="flex items-center justify-between">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">照片上傳（異常/優化佐證）</label>
+                        
+                    </div>
+
+                    <!-- 用於記錄目前照片數量（最多 3） -->
+                    <input type="hidden" id="photo_count" name="照片數量" value="1" />
+
+                    <div id="photo-slots" class="space-y-4">
+                        <!-- Slot 1（固定存在） -->
+                        <div class="photo-slot border border-gray-200 rounded-xl bg-white p-3" data-slot="1">
+                            <div class="text-xs font-semibold text-gray-600 mb-2">照片1</div>
+
+                            <input type="file" id="issue_photo" name="照片檔" accept="image/*"
+                                class="form-input bg-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                            <input type="hidden" id="issue_photo_data" name="照片資料" value="" />
+
+                            <div class="mt-3">
+                                <div class="text-xs text-gray-500 mb-2"></div>
+                                <div class="w-full border border-gray-200 rounded-xl bg-white p-3">
+                                    <img id="issue_photo_preview" alt="照片預覽" class="hidden w-full max-h-64 object-contain rounded-lg" />
+                                    <div id="issue_photo_empty" class="text-sm text-gray-400">尚未上傳照片</div>
+</div>
+                                <div class="mt-3 flex justify-start">
+                                    <button type="button"
+                                        class="add-photo-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 text-white font-bold shadow-md hover:bg-teal-700 focus:ring-4 focus:ring-teal-200 transition">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                                        </svg>
+                                        新增照片
+                                    </button>
+                                </div>
+
+                            </div>
                         </div>
+                    </div>
+
+                    <div class="mt-2 text-xs text-gray-500">
+                        
                     </div>
                 </div>
 
                 <div>
-                    <label for="remarks" class="block text-sm font-semibold text-gray-700 mb-1">備註</label>
+                    <label for="remarks class="block text-sm font-semibold text-gray-700 mb-1">備註</label>
                     <textarea id="remarks" name="備註" rows="5"
                         placeholder="補充說明其他未涵蓋事項。"
                         class="form-input h-32 md:h-36 resize-y focus:ring-teal-500 focus:border-teal-500"></textarea>
@@ -356,7 +385,6 @@
         // ===== Google Apps Script Web App 設定 =====
         const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycby4EafDJN6B6El3M6vL4-qFiWAIxW1_1JZ_TL9QKsj3ggX-d7Dvg7lX0H_ju5l2f0ltIg/exec";
         const GAS_TOKEN = "rice_test_2025"; // 必須與 Apps Script 端 TOKEN 完全一致
-
 
         const outputHeaders = [
             { outputName: '會議日期', formName: '會議日期' },
@@ -436,12 +464,14 @@
             }
         }
 
-        async function handleIssuePhotoChange(formElement, index) {
+        async function handleIssuePhotoChange(formElement, index, slot = 1) {
             const suffix = `-${index}`;
-            const fileInput = formElement.querySelector(`#issue_photo${suffix}`);
-            const hiddenInput = formElement.querySelector(`#issue_photo_data${suffix}`);
-            const previewImg = formElement.querySelector(`#issue_photo_preview${suffix}`);
-            const emptyHint = formElement.querySelector(`#issue_photo_empty${suffix}`);
+            const sfx = (slot === 1) ? '' : String(slot);
+
+            const fileInput = formElement.querySelector(`#issue_photo${sfx}${suffix}`);
+            const hiddenInput = formElement.querySelector(`#issue_photo_data${sfx}${suffix}`);
+            const previewImg = formElement.querySelector(`#issue_photo_preview${sfx}${suffix}`);
+            const emptyHint = formElement.querySelector(`#issue_photo_empty${sfx}${suffix}`);
 
             if (!fileInput || !hiddenInput || !previewImg || !emptyHint) return;
             const file = fileInput.files && fileInput.files[0];
@@ -466,6 +496,60 @@
             previewImg.src = dataUrl;
             previewImg.classList.remove('hidden');
             emptyHint.classList.add('hidden');
+        }
+
+        // --- 多照片：新增 Slot（最多 3 張） ---
+        function addPhotoSlot(formElement, index) {
+            const suffix = `-${index}`;
+            const countInput = formElement.querySelector(`#photo_count${suffix}`);
+            const slotsContainer = formElement.querySelector(`#photo-slots${suffix}`);
+            const addBtn = formElement.querySelector(`.add-photo-btn`);
+
+            if (!countInput || !slotsContainer) return;
+
+            const current = Math.max(1, parseInt(countInput.value || '1', 10) || 1);
+            if (current >= 3) {
+                if (addBtn) addBtn.disabled = true;
+                alert('最多只能新增 3 張照片。');
+                return;
+            }
+
+            const nextSlot = current + 1;
+            countInput.value = String(nextSlot);
+
+            // 建立 slot DOM（slot 2 / 3）
+            const wrapper = document.createElement('div');
+            wrapper.className = 'photo-slot border border-gray-200 rounded-xl bg-white p-3';
+            wrapper.dataset.slot = String(nextSlot);
+
+            const sfx = String(nextSlot);
+            wrapper.innerHTML = `
+                <div class="text-xs font-semibold text-gray-600 mb-2">照片${sfx}</div>
+
+                <input type="file" id="issue_photo${sfx}${suffix}" name="照片檔${sfx}" accept="image/*"
+                    class="form-input bg-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                <input type="hidden" id="issue_photo_data${sfx}${suffix}" name="照片資料${sfx}" value="" />
+
+                <div class="mt-3">
+                    <div class="w-full border border-gray-200 rounded-xl bg-white p-3">
+                        <img id="issue_photo_preview${sfx}${suffix}" alt="照片預覽" class="hidden w-full max-h-64 object-contain rounded-lg" />
+                        <div id="issue_photo_empty${sfx}${suffix}" class="text-sm text-gray-400">尚未上傳照片</div>
+                    </div>
+                </div>
+            `;
+
+            slotsContainer.appendChild(wrapper);
+
+            const fileInput = wrapper.querySelector(`#issue_photo${sfx}${suffix}`);
+            if (fileInput) {
+                fileInput.addEventListener('change', () => handleIssuePhotoChange(formElement, index, nextSlot));
+            }
+
+            // 3 張後就停用新增按鈕
+            if (nextSlot >= 3 && addBtn) {
+                addBtn.disabled = true;
+                addBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
         }
 
         // --- PPT Generation Logic (Production PPT 版型：內容頁；已移除封面/大綱) ---
@@ -539,22 +623,63 @@
                 // 圖片區
                 const descBoxH = 1.95;
                 const footerAreaH = 0.35;
-                const imgBox = {
+
+                // 原本單張照片的大圖框（只上傳 1 張時維持原規格，不做分欄縮放）
+                const imgBoxFull = {
                     x: 1.25,
                     y: 1.55,
                     w: W - 2.50,
                     h: H - 1.55 - descBoxH - footerAreaH - 0.15
                 };
 
-                if (!payload.photoDataUrl) {
+                const photos = Array.isArray(payload.photoDataUrls) ? payload.photoDataUrls.filter(u => u && u.startsWith('data:image/')) : [];
+
+                if (!photos || photos.length === 0) {
                     slide.addText('（照片位置）', {
-                        x: imgBox.x, y: imgBox.y + imgBox.h / 2 - 0.2, w: imgBox.w, h: 0.4,
+                        x: imgBoxFull.x, y: imgBoxFull.y + imgBoxFull.h / 2 - 0.2, w: imgBoxFull.w, h: 0.4,
                         fontFace: FONT, fontSize: 18, color: '666666',
                         align: 'center', valign: 'mid'
                     });
-                } else {
+                } else if (photos.length === 1) {
+                    // ✅ 只有 1 張：不分欄，不縮放版面（維持原大圖框）
                     slide.__imgJobs = slide.__imgJobs || [];
-                    slide.__imgJobs.push({ dataUrl: payload.photoDataUrl, box: imgBox });
+                    slide.__imgJobs.push({ dataUrl: photos[0], box: imgBoxFull });
+                } else {
+                    // ✅ 只有在 2～3 張時：才分欄、縮放圖片區（符合需求）
+                    const n = Math.min(3, photos.length);
+
+                    const captionH = 0.28;
+                    const captionGap = 0.05;
+
+                    const imgBox = {
+                        x: imgBoxFull.x,
+                        y: imgBoxFull.y,
+                        w: imgBoxFull.w,
+                        h: imgBoxFull.h - captionH - captionGap
+                    };
+
+                    const gap = 0.35;
+                    const eachW = (imgBox.w - gap * (n - 1)) / n;
+
+                    slide.__imgJobs = slide.__imgJobs || [];
+
+                    for (let i = 0; i < n; i++) {
+                        const box = {
+                            x: imgBox.x + i * (eachW + gap),
+                            y: imgBox.y,
+                            w: eachW,
+                            h: imgBox.h
+                        };
+                        slide.__imgJobs.push({ dataUrl: photos[i], box });
+
+                        // 照片標籤（紅字）：照片1/2/3（左到右）
+                        slide.addText(`照片${i + 1}`, {
+                            x: box.x, y: imgBox.y + imgBox.h + captionGap,
+                            w: box.w, h: captionH,
+                            fontFace: FONT, fontSize: 18, color: 'FF0000',
+                            align: 'center', valign: 'mid'
+                        });
+                    }
                 }
 
                 // 底部說明框（淺黃底 + 橘框）
@@ -634,7 +759,10 @@
 
                 const description = (fd.get('項目說明') || '').trim();
                 const execution = (fd.get('執行說明') || '').trim();
-                const photoDataUrl = (fd.get('照片資料') || '').toString();
+                const p1 = (fd.get('照片資料') || '').toString();
+                const p2 = (fd.get('照片資料2') || '').toString();
+                const p3 = (fd.get('照片資料3') || '').toString();
+                const photoDataUrls = [p1, p2, p3].filter(u => u && u.startsWith('data:image/'));
 
                 if (description !== '' || execution !== '') {
                     hasContent = true;
@@ -644,7 +772,7 @@
                         optType: optType || '優化類型',
                         desc1: description || '（說明）',
                         desc2: execution || '（詳細說明）',
-                        photoDataUrl: (photoDataUrl && photoDataUrl.startsWith('data:image/')) ? photoDataUrl : ''
+                        photoDataUrls: photoDataUrls
                     });
                 }
             });
@@ -870,7 +998,17 @@
             if (addLocalBtn) addLocalBtn.addEventListener('click', () => { cloneAndInitializeForm(); updateTOC(); });
 
             const photoInput = formElement.querySelector(`#issue_photo${suffix}`);
-            if (photoInput) photoInput.addEventListener('change', () => handleIssuePhotoChange(formElement, index));
+            if (photoInput) photoInput.addEventListener('change', () => handleIssuePhotoChange(formElement, index, 1));
+
+            // 多照片新增按鈕
+            const addPhotoBtn = formElement.querySelector(`.add-photo-btn`);
+            const countInput = formElement.querySelector(`#photo_count${suffix}`);
+            if (countInput) countInput.value = '1';
+            if (addPhotoBtn) {
+                addPhotoBtn.disabled = false;
+                addPhotoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                addPhotoBtn.addEventListener('click', () => addPhotoSlot(formElement, index));
+            }
         }
 
         function cloneAndInitializeForm(dataToPreFill) {
@@ -1623,7 +1761,6 @@
         });
     })();
     </script>
-
 
 </body>
 </html>
